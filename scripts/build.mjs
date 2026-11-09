@@ -1,0 +1,11 @@
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, copyFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+const root = fileURLToPath(new URL('../', import.meta.url));
+const cli = fileURLToPath(new URL('../node_modules/tailwindcss/lib/cli.js', import.meta.url));
+const result = spawnSync(process.execPath, [cli, '-i', 'styles/input.css', '--content', './index.html', '-o', 'assets/app.css', '--minify'], {cwd: root, stdio: 'inherit'});
+if (result.status !== 0) process.exit(result.status ?? 1);
+mkdirSync(new URL('../assets/vendor/', import.meta.url), {recursive: true});
+copyFileSync(new URL('../node_modules/vue/dist/vue.global.prod.js', import.meta.url), new URL('../assets/vendor/vue.global.prod.js', import.meta.url));
+const notices = ['vue', 'tailwindcss'].map(name => name + '\n' + readFileSync(new URL('../node_modules/' + name + '/LICENSE', import.meta.url), 'utf8')).join('\n\n');
+writeFileSync(new URL('../assets/vendor/THIRD-PARTY-NOTICES.txt', import.meta.url), notices);

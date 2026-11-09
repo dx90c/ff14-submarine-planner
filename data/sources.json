@@ -1,0 +1,21 @@
+{
+  "checkedOn": "2026-11-05",
+  "scope": "Snapshot, not a claim of latest game patch",
+  "files": [
+    {
+      "file": "SubmarineRank.csv",
+      "url": "https://raw.githubusercontent.com/xivapi/ffxiv-datamining/master/csv/en/SubmarineRank.csv",
+      "sha256": "926262fe4738d9fe54762647694ae8424609baeab259c0e245097dedda6f87fa"
+    },
+    {
+      "file": "SubmarinePart.csv",
+      "url": "https://raw.githubusercontent.com/xivapi/ffxiv-datamining/master/csv/en/SubmarinePart.csv",
+      "sha256": "d1e0948fc6a9eff6d953261c82e2b0c7fe9410f9ef60189fa1fc0526175392ef"
+    },
+    {
+      "file": "SubmarineExploration.csv",
+      "url": "https://raw.githubusercontent.com/xivapi/ffxiv-datamining/master/csv/en/SubmarineExploration.csv",
+      "sha256": "5e27e5e1f59e999171efee1e687c1dc24d2776cef25fbfc00c38ce391ae82301"
+    }
+  ]
+}
