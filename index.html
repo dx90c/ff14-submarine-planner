@@ -160,6 +160,23 @@
       outline: 2px solid #67e8f9;
       outline-offset: 2px;
     }
+    .drop-suggestions {
+      position: absolute;
+      top: calc(100% + 4px);
+      inset-inline: 0;
+      z-index: 60;
+      max-height: 16rem;
+      overflow-y: auto;
+      background: #0f172a;
+      border: 1px solid #475569;
+      border-radius: .75rem;
+      box-shadow: 0 8px 20px #020617b3;
+    }
+    .drop-suggestions li { padding: .65rem .875rem; cursor: pointer; }
+    .drop-suggestions li:hover, .drop-suggestions li[aria-selected="true"] {
+      background: #164e63;
+      color: #fff;
+    }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen selection:bg-cyan-500 selection:text-slate-950">
@@ -382,17 +399,34 @@
                     <input 
                       type="text" 
                       v-model="searchQuery" 
-                      @keyup.enter="handleSearchEnter"
-                      placeholder="搜尋掉落物 (Enter 瞬移海圖)..."
+                      autocomplete="off"
+                      role="combobox"
+                      aria-label="搜尋掉落物"
+                      aria-autocomplete="list"
+                      :aria-expanded="showDropSuggestions"
+                      :aria-controls="showDropSuggestions ? 'drop-suggestions' : undefined"
+                      :aria-activedescendant="showDropSuggestions && activeSuggestion >= 0 ? 'drop-option-' + activeSuggestion : undefined"
+                      @focus="suggestionsOpen = true"
+                      @blur="suggestionsOpen = false"
+                      @input="editDropQuery"
+                      @compositionend="editDropQuery"
+                      @keydown="handleDropSearchKey"
+                      placeholder="搜尋掉落物（可輸入部分名稱）…"
                       class="w-full bg-slate-950 border border-emerald-500/60 focus:border-emerald-400 rounded-xl pl-3.5 pr-8 py-2 text-base focus:outline-none placeholder-slate-500 text-slate-200 ring-1 ring-emerald-500/20 font-medium"
                     />
                     <button 
                       v-if="searchQuery" 
-                      @click="searchQuery = ''" aria-label="清除搜尋" 
+                      @click="clearDropSearch" aria-label="清除搜尋" 
                       class="absolute right-2.5 top-2 text-slate-400 hover:text-white text-base px-1"
                     >
                       ✕
                     </button>
+                    <ul v-if="showDropSuggestions" id="drop-suggestions" class="drop-suggestions"
+                        role="listbox" aria-label="符合的道具">
+                      <li v-for="(name, index) in dropSuggestions" :key="name" :id="'drop-option-' + index"
+                          role="option" :aria-selected="index === activeSuggestion"
+                          @mousedown.prevent @click="chooseDropSuggestion(name)">{{ name }}</li>
+                    </ul>
                   </div>
                 </div>
               </div>
@@ -782,7 +816,7 @@
 
   <noscript><p style="padding:24px;color:white">此工具需要啟用 JavaScript 才能使用。</p></noscript>
   <script>
-    const { createApp, ref, computed, watch } = Vue;
+    const { createApp, ref, computed, watch, nextTick } = Vue;
 
     // 1. 部件數據表 (繁體正體)
     const SUB_PARTS = [{"id": "1_hull", "slot": "hull", "code": "1", "name": "鯊魚級船體", "cost": 5, "surv": -10, "retr": 30, "spd": 20, "range": 40, "favor": 20, "minRank": 1}, {"id": "2_hull", "slot": "hull", "code": "2", "name": "甲殼級船體", "cost": 9, "surv": 15, "retr": 10, "spd": 0, "range": 60, "favor": 15, "minRank": 15}, {"id": "3_hull", "slot": "hull", "code": "3", "name": "鯨魚級船體", "cost": 12, "surv": -15, "retr": 55, "spd": 35, "range": 15, "favor": 20, "minRank": 25}, {"id": "4_hull", "slot": "hull", "code": "4", "name": "腔棘魚級船體", "cost": 14, "surv": 40, "retr": -10, "spd": 25, "range": 40, "favor": 25, "minRank": 35}, {"id": "5_hull", "slot": "hull", "code": "5", "name": "希爾德拉級船體", "cost": 17, "surv": 10, "retr": 75, "spd": 30, "range": -15, "favor": 5, "minRank": 45}, {"id": "1p_hull", "slot": "hull", "code": "1+", "name": "鯊魚級改船體", "cost": 20, "surv": -5, "retr": 40, "spd": 25, "range": 45, "favor": 35, "minRank": 50}, {"id": "2p_hull", "slot": "hull", "code": "2+", "name": "甲殼級改船體", "cost": 20, "surv": 20, "retr": 15, "spd": 5, "range": 65, "favor": 25, "minRank": 50}, {"id": "3p_hull", "slot": "hull", "code": "3+", "name": "鯨魚級改船體", "cost": 20, "surv": -10, "retr": 55, "spd": 40, "range": 20, "favor": 30, "minRank": 50}, {"id": "4p_hull", "slot": "hull", "code": "4+", "name": "腔棘魚級改船體", "cost": 20, "surv": 40, "retr": -5, "spd": 30, "range": 40, "favor": 30, "minRank": 50}, {"id": "5p_hull", "slot": "hull", "code": "5+", "name": "希爾德拉級改船體", "cost": 20, "surv": 10, "retr": 80, "spd": 30, "range": -15, "favor": 10, "minRank": 50}, {"id": "1_stern", "slot": "stern", "code": "1", "name": "鯊魚級船尾", "cost": 5, "surv": -30, "retr": 20, "spd": 60, "range": 30, "favor": 15, "minRank": 1}, {"id": "2_stern", "slot": "stern", "code": "2", "name": "甲殼級船尾", "cost": 9, "surv": 15, "retr": 0, "spd": 30, "range": 40, "favor": 25, "minRank": 15}, {"id": "3_stern", "slot": "stern", "code": "3", "name": "鯨魚級船尾", "cost": 12, "surv": 15, "retr": 20, "spd": 0, "range": 55, "favor": 15, "minRank": 25}, {"id": "4_stern", "slot": "stern", "code": "4", "name": "腔棘魚級船尾", "cost": 14, "surv": 10, "retr": 25, "spd": 35, "range": 25, "favor": 25, "minRank": 35}, {"id": "5_stern", "slot": "stern", "code": "5", "name": "希爾德拉級船尾", "cost": 17, "surv": 20, "retr": 60, "spd": 35, "range": -15, "favor": 5, "minRank": 45}, {"id": "1p_stern", "slot": "stern", "code": "1+", "name": "鯊魚級改船尾", "cost": 20, "surv": -25, "retr": 25, "spd": 70, "range": 35, "favor": 25, "minRank": 50}, {"id": "2p_stern", "slot": "stern", "code": "2+", "name": "甲殼級改船尾", "cost": 20, "surv": 20, "retr": 5, "spd": 35, "range": 45, "favor": 35, "minRank": 50}, {"id": "3p_stern", "slot": "stern", "code": "3+", "name": "鯨魚級改船尾", "cost": 20, "surv": 20, "retr": 20, "spd": 5, "range": 60, "favor": 20, "minRank": 50}, {"id": "4p_stern", "slot": "stern", "code": "4+", "name": "腔棘魚級改船尾", "cost": 20, "surv": 10, "retr": 25, "spd": 40, "range": 30, "favor": 30, "minRank": 50}, {"id": "5p_stern", "slot": "stern", "code": "5+", "name": "希爾德拉級改船尾", "cost": 20, "surv": 20, "retr": 60, "spd": 35, "range": -10, "favor": 10, "minRank": 50}, {"id": "1_bow", "slot": "bow", "code": "1", "name": "鯊魚級船首", "cost": 5, "surv": 50, "retr": 40, "spd": 10, "range": -20, "favor": 15, "minRank": 1}, {"id": "2_bow", "slot": "bow", "code": "2", "name": "甲殼級船首", "cost": 9, "surv": 60, "retr": 20, "spd": 20, "range": -15, "favor": 10, "minRank": 15}, {"id": "3_bow", "slot": "bow", "code": "3", "name": "鯨魚級船首", "cost": 12, "surv": 25, "retr": 60, "spd": -15, "range": 20, "favor": 15, "minRank": 25}, {"id": "4_bow", "slot": "bow", "code": "4", "name": "腔棘魚級船首", "cost": 14, "surv": 65, "retr": 10, "spd": -10, "range": 30, "favor": 0, "minRank": 35}, {"id": "5_bow", "slot": "bow", "code": "5", "name": "希爾德拉級船首", "cost": 17, "surv": 45, "retr": 30, "spd": -15, "range": 40, "favor": 40, "minRank": 45}, {"id": "1p_bow", "slot": "bow", "code": "1+", "name": "鯊魚級改船首", "cost": 20, "surv": 55, "retr": 50, "spd": 15, "range": -15, "favor": 25, "minRank": 50}, {"id": "2p_bow", "slot": "bow", "code": "2+", "name": "甲殼級改船首", "cost": 20, "surv": 65, "retr": 25, "spd": 25, "range": -10, "favor": 20, "minRank": 50}, {"id": "3p_bow", "slot": "bow", "code": "3+", "name": "鯨魚級改船首", "cost": 20, "surv": 25, "retr": 65, "spd": -10, "range": 25, "favor": 25, "minRank": 50}, {"id": "4p_bow", "slot": "bow", "code": "4+", "name": "腔棘魚級改船首", "cost": 20, "surv": 70, "retr": 15, "spd": -10, "range": 30, "favor": 5, "minRank": 50}, {"id": "5p_bow", "slot": "bow", "code": "5+", "name": "希爾德拉級改船首", "cost": 20, "surv": 45, "retr": 30, "spd": -10, "range": 40, "favor": 40, "minRank": 50}, {"id": "1_bridge", "slot": "bridge", "code": "1", "name": "鯊魚級艦橋", "cost": 5, "surv": 20, "retr": 20, "spd": 20, "range": 20, "favor": 20, "minRank": 1}, {"id": "2_bridge", "slot": "bridge", "code": "2", "name": "甲殼級艦橋", "cost": 9, "surv": 25, "retr": 5, "spd": 25, "range": 30, "favor": 30, "minRank": 15}, {"id": "3_bridge", "slot": "bridge", "code": "3", "name": "鯨魚級艦橋", "cost": 12, "surv": 0, "retr": 25, "spd": 20, "range": 45, "favor": 40, "minRank": 25}, {"id": "4_bridge", "slot": "bridge", "code": "4", "name": "腔棘魚級艦橋", "cost": 14, "surv": 55, "retr": 20, "spd": 35, "range": -15, "favor": 50, "minRank": 35}, {"id": "5_bridge", "slot": "bridge", "code": "5", "name": "希爾德拉級艦橋", "cost": 17, "surv": 55, "retr": 20, "spd": -5, "range": 30, "favor": 60, "minRank": 45}, {"id": "1p_bridge", "slot": "bridge", "code": "1+", "name": "鯊魚級改艦橋", "cost": 20, "surv": 25, "retr": 25, "spd": 30, "range": 25, "favor": 35, "minRank": 50}, {"id": "2p_bridge", "slot": "bridge", "code": "2+", "name": "甲殼級改艦橋", "cost": 20, "surv": 30, "retr": 10, "spd": 30, "range": 35, "favor": 40, "minRank": 50}, {"id": "3p_bridge", "slot": "bridge", "code": "3+", "name": "鯨魚級改艦橋", "cost": 20, "surv": 0, "retr": 30, "spd": 25, "range": 50, "favor": 45, "minRank": 50}, {"id": "4p_bridge", "slot": "bridge", "code": "4+", "name": "腔棘魚級改艦橋", "cost": 20, "surv": 60, "retr": 20, "spd": 35, "range": -10, "favor": 55, "minRank": 50}, {"id": "5p_bridge", "slot": "bridge", "code": "5+", "name": "希爾德拉級改艦橋", "cost": 20, "surv": 60, "retr": 20, "spd": -5, "range": 30, "favor": 60, "minRank": 50}];
@@ -2518,6 +2552,71 @@
         }, {deep: true});
         function normalizeRank() { playerRank.value = normalizeRankValue(playerRank.value); }
         const searchQuery = ref('');
+        const selectedDrop = ref(null);
+        const suggestionsOpen = ref(false);
+        const activeSuggestion = ref(-1);
+        const dropNames = [...new Set(SECTORS.flatMap(sector => sector.drops))];
+        const dropSuggestions = computed(() => {
+          const query = searchQuery.value.trim().toLowerCase();
+          if (!query) return [];
+          return dropNames.filter(name => name.toLowerCase().includes(query))
+            .sort((a, b) => Number(b.toLowerCase().startsWith(query)) - Number(a.toLowerCase().startsWith(query))
+              || a.length - b.length || a.localeCompare(b, 'zh-TW'))
+            .slice(0, 12);
+        });
+        const showDropSuggestions = computed(() => suggestionsOpen.value && dropSuggestions.value.length > 0);
+
+        function editDropQuery() {
+          selectedDrop.value = null;
+          activeSuggestion.value = -1;
+          suggestionsOpen.value = true;
+        }
+
+        function clearDropSearch() {
+          searchQuery.value = '';
+          editDropQuery();
+          suggestionsOpen.value = false;
+        }
+
+        function chooseDropSuggestion(name) {
+          searchQuery.value = name;
+          selectedDrop.value = name;
+          suggestionsOpen.value = false;
+          activeSuggestion.value = -1;
+          handleSearchEnter();
+        }
+
+        function handleDropSearchKey(event) {
+          if (event.isComposing || event.keyCode === 229) return;
+          if (event.key === 'Escape') {
+            suggestionsOpen.value = false;
+            activeSuggestion.value = -1;
+          } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            const count = dropSuggestions.value.length;
+            if (!count) return;
+            event.preventDefault();
+            suggestionsOpen.value = true;
+            const index = activeSuggestion.value;
+            const step = event.key === 'ArrowDown' ? 1 : -1;
+            activeSuggestion.value = index < 0 ? (step > 0 ? 0 : count - 1) : (index + step + count) % count;
+            nextTick(() => document.getElementById('drop-option-' + activeSuggestion.value)?.scrollIntoView({block: 'nearest'}));
+          } else if (event.key === 'Enter') {
+            event.preventDefault();
+            const option = showDropSuggestions.value ? dropSuggestions.value[activeSuggestion.value] : null;
+            if (option) chooseDropSuggestion(option);
+            else {
+              suggestionsOpen.value = false;
+              handleSearchEnter();
+            }
+          }
+        }
+
+        function sectorMatchesSearch(sector, query) {
+          if (selectedDrop.value) return sector.drops.includes(selectedDrop.value);
+          return sector.name.toLowerCase().includes(query)
+            || sector.fullName.toLowerCase().includes(query)
+            || sector.drops.some(drop => drop.toLowerCase().includes(query));
+        }
 
         // V2 分類道具面板控制
         const showCategoryPanel = ref(false);
@@ -2531,6 +2630,9 @@
         // 點選分類好的道具 ➔ 瞬移至對應海圖
         function selectCatalogItem(item) {
           searchQuery.value = item.name;
+          selectedDrop.value = item.name;
+          suggestionsOpen.value = false;
+          activeSuggestion.value = -1;
           if (item.sectors && item.sectors.length > 0) {
             const targetSector = item.sectors[0];
             activeSeaId.value = targetSector.seaId;
@@ -2566,28 +2668,13 @@
           const q = searchQuery.value.trim().toLowerCase();
           if (!q) return new Set();
 
-          const set = new Set();
-          SECTORS.forEach(s => {
-            if (
-              s.name.toLowerCase().includes(q) ||
-              s.fullName.toLowerCase().includes(q) ||
-              s.drops.some(d => d.toLowerCase().includes(q))
-            ) {
-              set.add(s.id);
-            }
-          });
-          return set;
+          return new Set(SECTORS.filter(sector => sectorMatchesSearch(sector, q)).map(sector => sector.id));
         });
 
         function handleSearchEnter() {
           const q = searchQuery.value.trim().toLowerCase();
           if (!q) return;
-
-          const match = SECTORS.find(s => 
-            s.name.toLowerCase().includes(q) ||
-            s.fullName.toLowerCase().includes(q) ||
-            s.drops.some(d => d.toLowerCase().includes(q))
-          );
+          const match = SECTORS.find(sector => sectorMatchesSearch(sector, q));
 
           if (match) {
             activeSeaId.value = match.sea;
@@ -2720,6 +2807,7 @@
         });
 
         function isDropMatched(drop) {
+          if (selectedDrop.value) return drop === selectedDrop.value;
           const q = searchQuery.value.trim().toLowerCase();
           if (!q) return false;
           return drop.toLowerCase().includes(q);
@@ -2805,7 +2893,14 @@
           inspectingSectorId,
           currentInspectSector,
           searchQuery,
-          handleSearchEnter,
+          suggestionsOpen,
+          showDropSuggestions,
+          dropSuggestions,
+          activeSuggestion,
+          editDropQuery,
+          clearDropSearch,
+          chooseDropSuggestion,
+          handleDropSearchKey,
           matchedSectorIds,
           outputList,
           displayListTitle,
